@@ -8,7 +8,7 @@ import pybullet_data
 
 from utilities import Models, Camera
 from collections import namedtuple
-from attrdict import AttrDict
+# from attrdict import AttrDict
 from tqdm import tqdm
 
 
@@ -88,7 +88,7 @@ class ClutteredPushGrasp:
         assert control_method in ('joint', 'end')
         self.robot.move_ee(action[:-1], control_method)
         self.robot.move_gripper(action[-1])
-        for _ in range(120):  # Wait for a few steps
+        for _ in range(1):  # Wait for a few steps
             self.step_simulation()
 
         reward = self.update_reward()
