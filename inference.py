@@ -37,7 +37,7 @@ pos_orient = 0
 
 def preprocess(motion_list, max_len):
     tmp_x = np.array(motion_list)[:,:3] # exclude the last dimension corresponding to button pressing
-    # tmp_x = np.concatenate([tmp_x, np.zeros((max_len - tmp_x.shape[0], tmp_x.shape[1]))]) # zero padding
+    tmp_x = np.concatenate([tmp_x, np.zeros((max_len - tmp_x.shape[0], tmp_x.shape[1]))]) # zero padding
     tmp_x = np.expand_dims(tmp_x, axis=0)
     return tmp_x
 
@@ -91,12 +91,12 @@ def inference():
             state = 0
             print("Button released")
             print("length of motion data : ", len(motion_list))
-            print(motion_list)
+            # print(motion_list)
             
             x_star = preprocess(motion_list, max_len)
-            print(x_star)
+            # print(x_star)
             pred = model.predict(x_star)
-            print(pred[0])
+            # print(pred[0])
             pred_class = pred[0].argmax()
             print(f"Predicted Class = {class_dict[pred_class]}")
             motion_list = []
