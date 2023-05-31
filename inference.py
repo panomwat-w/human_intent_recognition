@@ -14,8 +14,9 @@ from utilities import YCBModels, Camera
 import time
 import math
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
-max_len = 26
+max_len = 44
 localIP = "127.0.0.1"
 localPort = 12312
 bufferSize = 1024
@@ -38,6 +39,9 @@ pos_orient = 0
 def preprocess(motion_list, max_len):
     tmp_x = np.array(motion_list)[:,:3] # exclude the last dimension corresponding to button pressing
     tmp_x = np.concatenate([tmp_x, np.zeros((max_len - tmp_x.shape[0], tmp_x.shape[1]))]) # zero padding
+    # tmp_x_lag = np.concatenate([np.zeros((1, tmp_x.shape[1])), tmp_x[:-1, :]]) # lag 1
+    # velocity = tmp_x - tmp_x_lag
+    # tmp_x = np.concatenate([tmp_x, velocity], axis=1)
     tmp_x = np.expand_dims(tmp_x, axis=0)
     return tmp_x
 
@@ -70,10 +74,9 @@ def inference():
     i = 0
     while type(pos_orient) != list:
         pass
-    print("Finish initializing, you can start recording the data now")
+    print("Finish initializing")
 
     motion_list = []
-    dataset = []
     prev_pos_orient = pos_orient
     state = 0
     while True:
@@ -83,7 +86,6 @@ def inference():
             print("Button pressed, start recording ...")
 
         if state == 1 and pos_orient[6] == 1:
-            # print(pos_orient)
             if prev_pos_orient != pos_orient:
                 motion_list.append(pos_orient)
 
@@ -91,14 +93,17 @@ def inference():
             state = 0
             print("Button released")
             print("length of motion data : ", len(motion_list))
-            # print(motion_list)
-            
+            motion_array = np.array(motion_list)
+            # plt.plot(motion_array[:,0], motion_array[:,1], 'o-')
+            # plt.show()
+
             x_star = preprocess(motion_list, max_len)
-            # print(x_star)
             pred = model.predict(x_star)
-            # print(pred[0])
             pred_class = pred[0].argmax()
             print(f"Predicted Class = {class_dict[pred_class]}")
+
+
+
             motion_list = []
             print("Ready for new data")
         prev_pos_orient = pos_orient

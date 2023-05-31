@@ -42,7 +42,7 @@ def getting_phantom_pos(name):
         clientIP = "Client IP Address:{}".format(address)
 
         dict_msg = json.loads(message)
-        print(dict_msg)
+        # print(dict_msg)
         pos_orient = dict_msg["pos_orin"]
 
         # print(clientMsg)
@@ -68,6 +68,7 @@ def user_control_demo():
 
     env.reset()
     # env.SIMULATION_STEP_DELAY = 0
+    motion_data = []
     while True:
         # print(pos_orient_np)
         # print(type(env.read_debug_parameter()))
@@ -86,9 +87,14 @@ def user_control_demo():
             slave_pos[6] = 0.05
         else:
             slave_pos[6] = 0.0
+            a = np.stack(motion_data)
+            print("Min",a.min(axis=0))
+            print("Max",a.max(axis=0))
 
         # slave_pos.append(0.0)
-        # print(slave_pos)
+        print(pos_orient)
+        motion_data.append(np.array(pos_orient))
+        time.sleep(0.1)
         slave_pos = tuple(slave_pos)
 
         obs, reward, done, info = env.step(slave_pos, 'end')
