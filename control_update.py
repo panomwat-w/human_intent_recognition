@@ -63,7 +63,7 @@ def getting_phantom_pos(name):
 
 
 def load_model():
-    model = tf.keras.models.load_model("model/augment_position/best_cnn_model.h5")
+    model = tf.keras.models.load_model("best_cnn_model.h5")
     return model
 
 def path_interpolation(start, end, num):
@@ -72,7 +72,8 @@ def path_interpolation(start, end, num):
         path.append(start + (end - start) / num * i)
     return path
 
-def move_position(env, target_pos, gripper_length, distance=0.05, patience=100):
+def move_position(env, target_pos, gripper_length, distance=0.005, patience=100):
+    # print('move_position')
     slave_pos = list(env.read_debug_parameter()) # get initial position
     slave_pos[0] = target_pos[0]
     slave_pos[1] = target_pos[1]
@@ -82,81 +83,86 @@ def move_position(env, target_pos, gripper_length, distance=0.05, patience=100):
     obs, reward, done, info = env.step(slave_pos, 'end')
     d = calculate_distance(obs['ee_pos'], slave_pos[:3])
     i = 0
-    while d > distance or i < 10:
+    while d > distance:
         if i > patience:
             break
-        obs, reward, done, info = env.step(slave_pos, 'end')
+        env.step_simulation()
         d = calculate_distance(obs['ee_pos'], slave_pos[:3])
         i += 1
+    obs, reward, done, info = env.step(slave_pos, 'end')
     return obs, reward, done, info
 
-def update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=False):
-    if interpolation:
-        path = path_interpolation(current_pos, target_pos, num_interpolation)
-        for i in range(len(path)):
-            obs, reward, done, info= move_position(env, path[i], gripper_length)
-    else:
-        obs, reward, done, info= move_position(env, target_pos, gripper_length)
-    return obs, reward, done, info
+def move_gripper(env, gripper_length):
+    for i in range(100):
+        env.robot.move_gripper(gripper_length)
+        env.step_simulation()
+
+# def update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=False):
+#     if interpolation:
+#         path = path_interpolation(current_pos, target_pos, num_interpolation)
+#         for i in range(len(path)):
+#             obs, reward, done, info= move_position(env, path[i], gripper_length)
+#     else:
+#         obs, reward, done, info = move_position(env, target_pos, gripper_length)
+#     return obs, reward, done, info
 
 
 def calculate_distance(target, current):
     return np.linalg.norm(np.array(current) - np.array(target))
 
-def apply_motion_primitives(env, obs, pred_class, interpolation=False):
+def warm_up(env):
+    print('warm_up')
+    x = np.linspace(-0.2, 0.2, 3)
+    y = np.linspace(-0.2, 0.2, 3)
+    for i in range(len(x)):
+        target_pos = (x[i], 0, 0.5)
+        obs, reward, done, info = move_position(env, target_pos, 0.085)
+    # for i in range(len(y)):
+    #     target_pos = (0, y[i], 0.5)
+    #     obs, reward, done, info = move_position(env, target_pos, 0.085)
+    move_position(env, np.array([0.0,0.0,0.5]), 0.085)
+    return obs, reward, done, info
+
+def apply_motion_primitives(env, obs, pred_class, obj_pos=[-0.2, -0.2, 0.1], des_pos=[0.2, 0.2, 0.1]):
     print("pred_class: ", pred_class)
     current_pos = np.array(obs['ee_pos'])
     if pred_class == 0:
-        target_pos = np.array([-0.2, -0.2, 0.2])
-        gripper_length = 0.04
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
+        target_pos = np.array(obj_pos)
+        gripper_length = 0.085
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
         current_pos = np.array(obs['ee_pos'])
+
         gripper_length = 0.0
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        current_pos = np.array(obs['ee_pos'])
+        move_gripper(env, gripper_length)
 
     elif pred_class == 1:
-        # target_pos = np.array([-0.2, -0.2, 0.2])
-        # gripper_length = 0.04
-        # obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        # current_pos = np.array(obs['ee_pos'])
-        # gripper_length = 0.0
-        # obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        # current_pos = np.array(obs['ee_pos'])
         target_pos = current_pos
         target_pos[2] = 0.5
         gripper_length = 0.0
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        current_pos = np.array(obs['ee_pos'])
-        # target_pos = np.array([0.0, 0.0, 0.5])
-        # gripper_length = 0.0
-        # obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        # current_pos = np.array(obs['ee_pos'])
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
+    
     elif pred_class == 2:
-        target_pos = np.array([0.2, 0.2, current_pos[2]])
+        target_pos = np.array(des_pos)
+        target_pos[2] = 0.5
         gripper_length = 0.0
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
 
     elif pred_class == 3:
-        # target_pos = np.array([0.2, 0.2, current_pos[2]])
-        # gripper_length = 0.0
-        # obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        # current_pos = np.array(obs['ee_pos'])
-        target_pos = current_pos
-        target_pos[2] = 0.2
+        target_pos = np.array(des_pos)
         gripper_length = 0.0
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
         current_pos = np.array(obs['ee_pos'])
-        gripper_length = 0.1
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
-        current_pos = np.array(obs['ee_pos'])
+
+        gripper_length = 0.085
+        move_gripper(env, gripper_length)
+
         target_pos = current_pos
         target_pos[2] = 0.5
         gripper_length = 0.085
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
+
         target_pos = np.array(env.read_debug_parameter())[:3]
-        gripper_length = 0.085
-        obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
+        obs, reward, done, info = move_position(env, target_pos, gripper_length)
     else:
         raise ValueError("Invalid class")
     
@@ -181,7 +187,9 @@ def inference():
 
     env.reset()
 
-    obs, reward, done, info = env.step(env.read_debug_parameter(), 'end')
+    env.SIMULATION_STEP_DELAY = 1/100000.0
+    obs, reward, done, info= warm_up(env)
+    env.SIMULATION_STEP_DELAY = 1/240.0
     while type(pos_orient) != list:
         pass
     print("Finish initializing")
@@ -224,7 +232,7 @@ def inference():
                 continue
             else:
                 print("High confidence, executing motion primitives")
-                obs, reward, done, info = apply_motion_primitives(env, obs, pred_class, interpolation=False)
+                obs, reward, done, info = apply_motion_primitives(env, obs, pred_class)
 
 
             motion_list = []

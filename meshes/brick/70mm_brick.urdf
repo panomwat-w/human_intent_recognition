@@ -1,0 +1,17 @@
+<robot name="brick">
+    <link name ="70mm_brick">
+        <inertial>
+            <mass value="0"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+        <visual>
+        <origin xyz='0 0 0' rpy='0 0 0'/>
+        <geometry>
+            <mesh filename="70mm_brick.dae"  scale="0.001 0.001 0.001" />
+        </geometry>
+        <material name="red">
+            <color rgba="1 0 0 1"/>
+        </material>
+        </visual>
+    </link>
+</robot>

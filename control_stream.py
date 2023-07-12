@@ -15,6 +15,38 @@ import time
 import math
 import tensorflow as tf
 
+###################
+print('\n==============\nRobot Master Client\n==============\n')
+print('\n')
+
+###################
+
+ip_address = '127.0.0.1'
+port = '11001'
+
+# Create a TCP/IP socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Bind the socket to the port
+server_address = (ip_address, int(port))
+print('connect to server at %s port %s' % server_address)
+s.connect(server_address)
+
+s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 100)
+
+# Enum of message types, must match InterboClient
+class MessageType:
+    Invalid, Acknowledge, Goodbye, PoseUpdate = range(4)
+
+# Example message: 
+# update_pose -180,30,75,-10,90,0,1
+
+# Key Parameters
+default_buffer_size = 1024
+buffer_size = default_buffer_size
+
+###################
+
 max_len = 44
 localIP = "127.0.0.1"
 localPort = 12312
@@ -62,8 +94,8 @@ def getting_phantom_pos(name):
         # print(pos_orient_np.size)
 
 
-def load_model():
-    model = tf.keras.models.load_model("model/augment_position/best_cnn_model.h5")
+def load_model(model_path="best_cnn_model.h5"):
+    model = tf.keras.models.load_model(model_path)
     return model
 
 def path_interpolation(start, end, num):
@@ -87,6 +119,7 @@ def move_position(env, target_pos, gripper_length, distance=0.05, patience=100):
             break
         obs, reward, done, info = env.step(slave_pos, 'end')
         d = calculate_distance(obs['ee_pos'], slave_pos[:3])
+        return_data, msg = stream_joint_pose(env, gripper_length)
         i += 1
     return obs, reward, done, info
 
@@ -162,6 +195,35 @@ def apply_motion_primitives(env, obs, pred_class, interpolation=False):
     
     return obs, reward, done, info
 
+def stream_joint_pose(env, gripper_length):
+    joint_pose = env.robot.get_joint_pose()
+    joint_pose_degree = np.array(joint_pose)/np.pi*180
+    gripper_length = 1 - gripper_length/0.085
+    joint_pose_msg = ','.join(list(joint_pose_degree.astype('str'))+[str(gripper_length)])
+    msg = f'update_pose {joint_pose_msg}'
+    print(msg)
+    return_data = send_message(msg)
+    return return_data, msg
+
+def send_message(msg):     
+    if (msg == "exit"):
+        msg = "2"
+        s.send(msg.encode('utf-8'))      
+    elif ("update_pose" in msg):            
+        msgSplit = msg.split(' ')
+        if (len(msgSplit) == 2):
+            poseArr = msgSplit[1]
+            msg = "%s\t%s\n" % (str(int(MessageType.PoseUpdate)), poseArr)
+        else:
+            msg = ''
+            print('Invalid test config')
+
+    s.send(msg.encode('utf-8'))
+    
+    data = s.recv(buffer_size)
+    print('received: ', data)
+    return data
+
 def inference():
     model = load_model()
     x = threading.Thread(target=getting_phantom_pos, args=(1,))
@@ -180,8 +242,9 @@ def inference():
     env = ClutteredPushGrasp(robot, ycb_models, camera, vis=True)
 
     env.reset()
-
-    obs, reward, done, info = env.step(env.read_debug_parameter(), 'end')
+    slave_pos = env.read_debug_parameter()
+    obs, reward, done, info = env.step(slave_pos, 'end')
+    return_data, msg = stream_joint_pose(env, slave_pos[6])
     while type(pos_orient) != list:
         pass
     print("Finish initializing")

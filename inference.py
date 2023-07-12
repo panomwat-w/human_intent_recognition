@@ -64,7 +64,7 @@ def getting_phantom_pos(name):
 
 
 def load_model():
-    model = tf.keras.models.load_model("best_lstm_model.h5")
+    model = tf.keras.models.load_model("best_cnn_model.h5")
     return model
 
 def inference():
@@ -96,6 +96,34 @@ def inference():
             motion_array = np.array(motion_list)
             # plt.plot(motion_array[:,0], motion_array[:,1], 'o-')
             # plt.show()
+            plt.figure(figsize=(5,5))
+            ax = plt.axes(projection='3d')
+            ax.plot3D(motion_array[:,0], motion_array[:,1], motion_array[:,2])
+            plt.xlabel("x")
+            plt.ylabel("y")
+            ax.set_zlabel("z")
+            plt.xlim(-0.2, 0.2)
+            plt.ylim(-0.2, 0.2)
+            ax.set_zlim(-0.2, 0.2)
+            plt.show()
+
+            plt.figure(figsize=(15,5))
+            plt.subplot(1,3,1)
+            plt.plot(motion_array[:,0], motion_array[:,1], 'o-')
+            plt.xlim(-0.2, 0.2)
+            plt.ylim(-0.2, 0.2)
+            plt.title("x-y")
+            plt.subplot(1,3,2)
+            plt.plot(motion_array[:,1], motion_array[:,2], 'o-')
+            plt.xlim(-0.2, 0.2)
+            plt.ylim(-0.2, 0.2)
+            plt.title("y-z")
+            plt.subplot(1,3,3)
+            plt.plot(motion_array[:,0], motion_array[:,2], 'o-')
+            plt.xlim(-0.2, 0.2)
+            plt.ylim(-0.2, 0.2)
+            plt.title("x-z")
+            plt.show()
 
             x_star = preprocess(motion_list, max_len)
             pred = model.predict(x_star)

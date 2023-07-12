@@ -4,16 +4,50 @@ import numpy as np
 import pybullet as p
 
 import threading
+import multiprocessing
 import json
 import socket
 
 from tqdm import tqdm
+from task_environment import stream_joint_pose, init_env, log_robot_object
 from env import ClutteredPushGrasp
 from robot import Panda, UR5Robotiq85, UR5Robotiq140
 from utilities import YCBModels, Camera
+from task_environment import calc_brick_origin
 import time
 import math
 
+###################
+# print('\n==============\nRobot Master Client\n==============\n')
+# print('\n')
+
+# ###################
+
+# ip_address = '127.0.0.1'
+# port = '11001'
+
+# # Create a TCP/IP socket
+# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# # Bind the socket to the port
+# server_address = (ip_address, int(port))
+# print('connect to server at %s port %s' % server_address)
+# s.connect(server_address)
+
+# s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 100)
+
+# # Enum of message types, must match InterboClient
+# class MessageType:
+#     Invalid, Acknowledge, Goodbye, PoseUpdate = range(4)
+
+# # Example message: 
+# # update_pose -180,30,75,-10,90,0,1
+
+# # Key Parameters
+# default_buffer_size = 1024
+# buffer_size = default_buffer_size
+
+###################
 
 localIP = "127.0.0.1"
 localPort = 12312
@@ -30,6 +64,8 @@ UDPServerSocket.bind((localIP, localPort))
 print("UDP server up and listening")
 
 pos_orient = 0
+silhouette_id = None
+object_position = ()
 
 def getting_phantom_pos(name):
     global pos_orient
@@ -85,20 +121,14 @@ def move_position(env, target_pos, gripper_length, distance=0.005, patience=100)
     obs, reward, done, info = env.step(slave_pos, 'end')
     return obs, reward, done, info
 
-def move_gripper(env, gripper_length):
-    for i in range(100):
-        env.robot.move_gripper(gripper_length)
+def move_gripper(env, gripper_length, distance=0.01, patience=150):
+    env.robot.move_gripper(gripper_length)
+    current_length = env.robot.get_gripper_length()
+    d = abs(current_length - gripper_length)
+    i = 0
+    while d > distance and i < patience:
         env.step_simulation()
-
-# def update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=False):
-#     if interpolation:
-#         path = path_interpolation(current_pos, target_pos, num_interpolation)
-#         for i in range(len(path)):
-#             obs, reward, done, info= move_position(env, path[i], gripper_length)
-#     else:
-#         obs, reward, done, info = move_position(env, target_pos, gripper_length)
-#     return obs, reward, done, info
-
+        i += 1
 
 def calculate_distance(target, current):
     return np.linalg.norm(np.array(current) - np.array(target))
@@ -110,9 +140,6 @@ def warm_up(env):
     for i in range(len(x)):
         target_pos = (x[i], 0, 0.5)
         obs, reward, done, info = move_position(env, target_pos, 0.085)
-    # for i in range(len(y)):
-    #     target_pos = (0, y[i], 0.5)
-    #     obs, reward, done, info = move_position(env, target_pos, 0.085)
     move_position(env, np.array([0.0,0.0,0.5]), 0.085)
     return obs, reward, done, info
 
@@ -161,53 +188,60 @@ def apply_motion_primitives(env, obs, pred_class, obj_pos=[-0.2, -0.2, 0.1], des
     
     return obs, reward, done, info
 
+def project_object(prev_silhouette_id=None):
+    if prev_silhouette_id is not None:
+        p.removeBody(prev_silhouette_id)
+    global silhouette_id
+    cubePos, cubeOrn = object_position
+    silhouette_id = p.loadURDF("meshes/brick/brick_silhouette.urdf", [cubePos[0], cubePos[1], 0.0], cubeOrn, useFixedBase=True)
+
 def user_control_demo():
     # x = threading.Thread(target=getting_phantom_pos, args=(1,))
     # x.start()
-
-    ycb_models = YCBModels(
-        os.path.join('./data/ycb', '**', 'textured-decmp.obj'),
-    )
-    camera = Camera((1, 1, 1),
-                    (0, 0, 0),
-                    (0, 0, 1),
-                    0.1, 5, (320, 320), 40)
-    camera = None
-    robot = UR5Robotiq140((0, 0.5, 0), (0, 0, 0))
-    env = ClutteredPushGrasp(robot, ycb_models, camera, vis=True)
-
+    env = init_env()
     env.reset()
+    
     brick_origin = (-0.2, -0.2, 0.0) 
-    brick_id_list = []
-    for i in range(4):
-        brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, useFixedBase=False) 
-        brick_id_list.append(brick_id)
-        brick_origin = (brick_origin[0]+0.15, brick_origin[1], brick_origin[2])
-    print(brick_id_list)
-    base_id = p.loadURDF("meshes/brick/base.urdf", [0.0,0.0,0.0], useFixedBase=True) 
+    
+    fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (0.06, 0.0), (0.06, 0.12, 0.06), 0.01, 0.03)
+    fix_brick_id_list = []
+    for i in range(len(fix_brick_origin)):
+        brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", fix_brick_origin[i], useFixedBase=True) 
+        fix_brick_id_list.append(brick_id)
+
+    
+    brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, useFixedBase=False) 
 
     env.SIMULATION_STEP_DELAY = 1/100000.0
     obs, reward, done, info= warm_up(env)
     env.SIMULATION_STEP_DELAY = 1/240.0
-    j = 0
-    target_pos=[0.2, 0.2, 0.23]
+
+    target_pos=[remove_brick_origin[0], remove_brick_origin[1], 0.28]
     count = 0
-    while j < len(brick_id_list):
+    silhouette_id=None
+    # z = threading.Thread(target=project_object, args=(prev_silhouette_id,))
+    # z.start()
+    cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
+    # y = threading.Thread(target=log_robot_object, args=(env, brick_id,))
+    # y.start()
+    while True:
         # pred_class = int(input("Enter predicted class : "))
         pred_class = count % 4
         count += 1
-        cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id_list[j])
+        cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
         print("cubePos before: ", cubePos)
-        obj_pos = [cubePos[0], cubePos[1], cubePos[2]+0.2]
+        obj_pos = [cubePos[0], cubePos[1], cubePos[2]+0.15]
         obs, reward, done, info= apply_motion_primitives(env, obs, pred_class, obj_pos=obj_pos, des_pos=target_pos)
-        cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id_list[j])
+        cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
         print("cubePos after: ", cubePos)
-        if cubePos[0] > 0.1 and cubePos[1] > 0.1 and pred_class == 3:
-            # brick_id_list.pop(0)
-            print("brick_id_list: ", brick_id_list)
-            # p.removeBody(brick_id_list[0])
-            target_pos[2] = cubePos[2] + 0.2
-            j += 1
+        # if pred_class == 2:
+        #     if silhouette_id is not None:
+        #         p.removeBody(silhouette_id)
+        #     cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
+        #     silhouette_id = p.loadURDF("meshes/brick/brick_silhouette.urdf", [cubePos[0], cubePos[1], 0.0], cubeOrn, useFixedBase=True)
+
+        # if pred_class == 3:
+        #     break
 
 if __name__ == '__main__':
     user_control_demo()

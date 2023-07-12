@@ -18,7 +18,7 @@ class FailToReachTargetError(RuntimeError):
 
 class ClutteredPushGrasp:
 
-    SIMULATION_STEP_DELAY = 1 / 240.
+    SIMULATION_STEP_DELAY = 1 / 240000.
 
     def __init__(self, robot, models: Models, camera=None, vis=False) -> None:
         self.robot = robot
@@ -29,8 +29,10 @@ class ClutteredPushGrasp:
 
         # define environment
         self.physicsClient = p.connect(p.GUI if self.vis else p.DIRECT)
+        p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0.4, cameraPitch=-32, cameraTargetPosition=[0, 0, 0])
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -10)
+        
         self.planeID = p.loadURDF("plane.urdf")
 
         self.robot.load()
@@ -44,18 +46,22 @@ class ClutteredPushGrasp:
         self.pitchId = p.addUserDebugParameter("pitch", -3.14, 3.14, np.pi/2)
         self.yawId = p.addUserDebugParameter("yaw", -np.pi/2, np.pi/2, np.pi/2)
         self.gripper_opening_length_control = p.addUserDebugParameter("gripper_opening_length", 0, 0.085, 0.04)
+        self.object_ids = []
 
-        self.boxID = p.loadURDF("./urdf/skew-box-button.urdf",
-                                [0.0, 0.0, 0.0],
-                                # p.getQuaternionFromEuler([0, 1.5706453, 0]),
-                                p.getQuaternionFromEuler([0, 0, 0]),
-                                useFixedBase=True,
-                                flags=p.URDF_MERGE_FIXED_LINKS | p.URDF_USE_SELF_COLLISION)
+        # self.boxID = p.loadURDF("./urdf/skew-box-button.urdf",
+        #                         [0.0, 0.0, 0.0],
+        #                         # p.getQuaternionFromEuler([0, 1.5706453, 0]),
+        #                         p.getQuaternionFromEuler([0, 0, 0]),
+        #                         useFixedBase=True,
+        #                         flags=p.URDF_MERGE_FIXED_LINKS | p.URDF_USE_SELF_COLLISION)
 
         # For calculating the reward
-        self.box_opened = False
-        self.btn_pressed = False
-        self.box_closed = False
+        # self.box_opened = False
+        # self.btn_pressed = False
+        # self.box_closed = False
+        # self.brick_origin = (-0.2, -0.2, 0.0) 
+        # self.brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", self.brick_origin, useFixedBase=False) 
+        # self.base_id = p.loadURDF("meshes/brick/brick_clone.urdf", [0.0, 0.0, 0.0], useFixedBase=True) 
 
     def step_simulation(self):
         """
@@ -93,24 +99,25 @@ class ClutteredPushGrasp:
 
         reward = self.update_reward()
         done = True if reward == 1 else False
-        info = dict(box_opened=self.box_opened, btn_pressed=self.btn_pressed, box_closed=self.box_closed)
+        # info = dict(box_opened=self.box_opened, btn_pressed=self.btn_pressed, box_closed=self.box_closed)
+        info = None
         return self.get_observation(), reward, done, info
 
     def update_reward(self):
         reward = 0
-        if not self.box_opened:
-            if p.getJointState(self.boxID, 1)[0] > 1.9:
-                self.box_opened = True
-                print('Box opened!')
-        elif not self.btn_pressed:
-            if p.getJointState(self.boxID, 0)[0] < - 0.02:
-                self.btn_pressed = True
-                print('Btn pressed!')
-        else:
-            if p.getJointState(self.boxID, 1)[0] < 0.1:
-                print('Box closed!')
-                self.box_closed = True
-                reward = 1
+        # if not self.box_opened:
+        #     if p.getJointState(self.boxID, 1)[0] > 1.9:
+        #         self.box_opened = True
+        #         print('Box opened!')
+        # elif not self.btn_pressed:
+        #     if p.getJointState(self.boxID, 0)[0] < - 0.02:
+        #         self.btn_pressed = True
+        #         print('Btn pressed!')
+        # else:
+        #     if p.getJointState(self.boxID, 1)[0] < 0.1:
+        #         print('Box closed!')
+        #         self.box_closed = True
+        #         reward = 1
         return reward
 
     def get_observation(self):
@@ -130,7 +137,7 @@ class ClutteredPushGrasp:
 
     def reset(self):
         self.robot.reset()
-        self.reset_box()
+        # self.reset_box()
         return self.get_observation()
 
     def close(self):

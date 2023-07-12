@@ -133,7 +133,7 @@ def apply_motion_primitives(env, obs, pred_class, interpolation=False):
         obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
         current_pos = np.array(obs['ee_pos'])
     elif pred_class == 2:
-        target_pos = np.array([0.2, 0.2, current_pos[2]])
+        target_pos = np.array([0.2, -0.2, current_pos[2]])
         gripper_length = 0.0
         obs, reward, done, info = update_position(env, current_pos, target_pos, gripper_length, num_interpolation=20, interpolation=interpolation)
 
