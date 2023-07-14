@@ -69,7 +69,7 @@ def remove_all_objects(env):
 
 def user_control_demo(env):
     global msgFromServer
-    model = load_model()
+    model = load_model(model_path="best_lstm_model.h5")
     brick_origin = (-0.3, 0.05, 0.03) 
 
     fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (-0.1, -0.1), (0.04, 0.08), 0.015, 0.02)
