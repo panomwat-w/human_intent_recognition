@@ -8,16 +8,16 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <box size="0.04 0.08 0.04"/>
+                <box size="0.01 0.9 0.3"/>
             </geometry>
-            <material name="Red">
-                <color rgba="1.0 0 0 1.0"/>
+            <material name="Blue">
+                <color rgba="0 0 1.0 1.0"/>
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <box size="0.04 0.08 0.04"/>
+                <box size="0.01 0.9 0.3"/>
             </geometry>
         </collision> 
     </link>

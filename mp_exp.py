@@ -4,7 +4,6 @@ import numpy as np
 import pybullet as p
 
 import threading
-import multiprocessing
 import json
 import socket
 
@@ -19,7 +18,6 @@ localPort = 12312
 bufferSize = 1024
 msgFromServer = ["Hello UDP Client"]
 lock = threading.Lock()
-
 
 # Create a datagram socket
 UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -69,7 +67,8 @@ def remove_all_objects(env):
 
 def user_control_demo(env):
     global msgFromServer
-    model = load_model(model_path="best_lstm_model.h5")
+    model_name="model_experiments/best_lstm_model_5_True_(0.0, 0.03)_True_(1.0, 0.2)_0.25_[100]_[100]_True_relu.h5"
+    model = load_model(model_path=model_name)
     brick_origin = (-0.3, 0.05, 0.03) 
 
     fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (-0.1, -0.1), (0.04, 0.08), 0.015, 0.02)
@@ -86,6 +85,7 @@ def user_control_demo(env):
     env.SIMULATION_STEP_DELAY = 1/100000.0
     warm_up(env)
     env.SIMULATION_STEP_DELAY = 1/240.0
+    env.SIMULATION_STEP_DELAY = 1e-10
 
     target_pos=[remove_brick_origin[0], remove_brick_origin[1], 0.28]
     count = 0

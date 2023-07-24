@@ -1,7 +1,7 @@
 import pybullet as p
 import math
 from collections import namedtuple
-
+import os
 
 class RobotBase(object):
     """
@@ -35,6 +35,7 @@ class RobotBase(object):
         """
         self.base_pos = pos
         self.base_ori = p.getQuaternionFromEuler(ori)
+        
 
     def load(self):
         self.__init_robot__()
@@ -224,10 +225,13 @@ class UR5Robotiq140(UR5Robotiq85):
     def __init_robot__(self):
         self.eef_id = 7
         self.arm_num_dofs = 6
-        self.arm_rest_poses = [-1.5690622952052096, -1.5446774605904932, 1.343946009733127, -1.3708613585093699,
-                               -1.5707970583733368, 0.0009377758247187636]
-        self.id = p.loadURDF('./urdf/ur5_robotiq_140.urdf', self.base_pos, self.base_ori,
-                             useFixedBase=True, flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES)
+        # self.arm_rest_poses = [-1.5690622952052096, -1.5446774605904932, 1.343946009733127, -1.3708613585093699,
+        #                        -1.5707970583733368, 0.0009377758247187636]
+        self.arm_rest_poses = [-1.754893949315914, -1.5862309317743646, 1.461451036502509, -1.4514595238094246, -1.5668785753942878, -3.1416142947873147]
+        project_path = os.getcwd()
+        p.setAdditionalSearchPath(project_path)
+        # self.id = p.loadURDF('urdf/ur5_robotiq_140.urdf', self.base_pos, self.base_ori, useFixedBase=True, flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES)
+        self.id = p.loadURDF('./urdf/ur5_robotiq_140.urdf', self.base_pos, self.base_ori, useFixedBase=True)
         self.gripper_range = [0, 0.085]
         # TODO: It's weird to use the same range and the same formula to calculate open_angle as Robotiq85.
 

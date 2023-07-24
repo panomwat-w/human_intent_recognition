@@ -26,8 +26,7 @@ def user_control_demo():
     # robot = UR5Robotiq140((0, 0.5, 0), (0, 0, 0))
     env = init_env()
     env.reset()
-    env.SIMULATION_STEP_DELAY = 1e-10
-    p.setRealTimeSimulation(1)
+    env.SIMULATION_STEP_DELAY = 0.
     # y = threading.Thread(target=stream_joint_pose, args=(env, ))
     # y.start()
     # env.SIMULATION_STEP_DELAY = 0
@@ -40,6 +39,8 @@ def user_control_demo():
     # brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", location, useFixedBase=False)
     while True:
         obs, reward, done, info = env.step(env.read_debug_parameter(), 'end')
+        events = p.getVREvents()
+        print(events)
         
           
         # print(obs, reward, done, info)

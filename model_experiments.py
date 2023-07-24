@@ -342,7 +342,7 @@ def main():
         y_test_bool = np.argmax(y_test[cond], axis=1)
         report_dict = classification_report(y_test_bool, y_pred_bool, output_dict=True)
 
-        wandb.log({"infer_time": inference_time, "test_acc": test_acc, "test_loss": test_loss, "classification_report": report_dict})
+        wandb.log({"infer_time": inference_time, "test_acc": test_acc, "test_loss": test_loss})
         wandb.finish()
 
 

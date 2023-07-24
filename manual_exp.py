@@ -66,8 +66,8 @@ def rescale_pos_orient(pos_orient):
     y_range = [-0.224, 0.224]
     z_range = [0.0, 1.0]
 
-    x = ((pos_orient[1] - x_range_device[0])/(x_range_device[1] - x_range_device[0]) - 0.5)*0.85
-    y = ((pos_orient[0] - y_range_device[0])/(y_range_device[1] - y_range_device[0]) - 0.5)*0.85
+    x = ((pos_orient[1] - x_range_device[0])/(x_range_device[1] - x_range_device[0]) - 0.5)*0.95
+    y = ((pos_orient[0] - y_range_device[0])/(y_range_device[1] - y_range_device[0]) - 0.5)*1.1
     z = ((pos_orient[2] - z_range_device[0])/(z_range_device[1] - z_range_device[0]))*0.7
     # z = pos_orient[2] - 0.2
 
@@ -81,7 +81,7 @@ def initialise():
 
     env = init_env()
     env.reset()
-    env.SIMULATION_STEP_DELAY = 0.
+    env.SIMULATION_STEP_DELAY = 1e-20
 
     return env
 
@@ -106,14 +106,15 @@ def user_control_demo(env):
 
     brick_origin = (-0.25, 0.1, 0.03) 
 
-    fix_brick_origin, remove_brick_origin = calc_brick_origin(4, (-0.1, -0.1), (0.06, 0.12), 0.02, 0.03)
+    fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (-0.1, -0.1), (0.04, 0.08), 0.015, 0.02)
     fix_brick_id_list = []
     for i in range(len(fix_brick_origin)):
         brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", fix_brick_origin[i], useFixedBase=True) 
         env.object_ids.append(brick_id)
         fix_brick_id_list.append(brick_id)
 
-    brick_orn = p.getQuaternionFromEuler([0, 0, np.pi/4])
+    brick_orn = p.getQuaternionFromEuler([0, 0, np.pi/2])
+    # brick_orn = p.getQuaternionFromEuler([0, 0, 0])
     brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, brick_orn, useFixedBase=False) 
     env.object_ids.append(brick_id)
 
