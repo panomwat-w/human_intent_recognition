@@ -5,19 +5,19 @@ import pybullet_data
 import threading
 import json
 import socket
-import tensorflow as tf
+# import tensorflow as tf
 
 from task_environment import *
 import time
 
-tf.config.set_visible_devices([], 'GPU')
+# # tf.config.set_visible_devices([], 'GPU')
 # gpus = tf.config.list_physical_devices('GPU')
 # if gpus:
 #     # Restrict TensorFlow to only allocate 2GB of memory on the first GPU
 #     try:
 #         tf.config.set_logical_device_configuration(
 #             gpus[0],
-#             [tf.config.LogicalDeviceConfiguration(memory_limit=4096)])
+#             [tf.config.LogicalDeviceConfiguration(memory_limit=8192)])
 #         logical_gpus = tf.config.list_logical_devices('GPU')
 #         print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
 #     except RuntimeError as e:
@@ -207,12 +207,13 @@ def burn_samples():
         events = p.getVREvents(allAnalogAxes=1)
 
 def load_model(model_path="best_lstm_model.h5"):
+    print('model loading')
     model = tf.keras.models.load_model(model_path)
     x_dummy = np.zeros((20, 40, 3))
     model.predict(x_dummy)
-    print('model loading')
-    pred = inference(model)
-    print(pred)
+    # print('model loading')
+    # pred = inference(model)
+    # print(pred)
     return model
 
 def inference(model, pred_threshold=0.6):
@@ -280,6 +281,89 @@ def inference(model, pred_threshold=0.6):
                 print("High confidence, executing motion primitives")
                 return pred_class
 
+def receive_message(motion_list):
+    data_dict =  {'motion': motion_list}
+    msgFromClient = json.dumps(data_dict)
+    bytesToSend         = str.encode(msgFromClient)
+    serverAddressPort   = ("127.0.0.1", 20001)
+
+    bufferSize          = 10000
+
+    # Create a UDP socket at client side
+
+    UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+    # Send to server using created UDP socket
+
+    UDPClientSocket.sendto(bytesToSend, serverAddressPort)
+
+    msgFromServer = UDPClientSocket.recvfrom(bufferSize)
+    result = json.loads(msgFromServer[0])
+    return result
+
+def inference_udp(pred_threshold=0.6):
+    global msgFromServer
+    max_len = 170
+    motion_list = []
+    prev_pos_orient = pos_orient
+    state = 0
+    debug_text = -1
+    p.removeUserDebugItem(debug_text)
+    debug_text = p.addUserDebugText("Ready to record", (0.2,0.1,0.3), (1,0,0))
+    while True:
+
+        if state == 0 and pos_orient[6] == 1:
+            state = 1
+            print("Button pressed, start recording ...")
+            with lock:
+                msgFromServer[0] = "Push"
+            p.removeUserDebugItem(debug_text)
+            debug_text = p.addUserDebugText("Button pressed, start recording ...", (0.2,0.1,0.3), (1,0,0))
+
+        if state == 1 and pos_orient[6] == 1:
+            with lock:
+                msgFromServer[0] = "Push"
+            motion_list.append(pos_orient)
+            time.sleep(0.01)
+
+        if state == 1 and pos_orient[6] == 0:
+            state = 0
+            with lock:
+                msgFromServer[0] = "Hello UDP Client"
+            p.removeUserDebugItem(debug_text)
+            debug_text = p.addUserDebugText("Button released", (0.2,0.1,0.3), (1,0,0))
+            print("Button released")
+            print("length of motion data : ", len(motion_list))
+            if len(motion_list) == 0:
+                print("No motion data, please try again")
+                p.removeUserDebugItem(debug_text)
+                debug_text = p.addUserDebugText("No motion data, please try againd", (0.2,0.1,0.3), (1,0,0))
+                motion_list = []
+                print("Ready for new data")
+                continue
+            if len(motion_list) > max_len:
+                print("Too long, motion data is truncated")
+                p.removeUserDebugItem(debug_text)
+                debug_text = p.addUserDebugText("Too long, motion data is truncated", (0.2,0.1,0.3), (1,0,0))
+                motion_list = motion_list[:max_len]
+            
+            pred_dict = receive_message(motion_list)
+            pred = np.array(pred_dict['pred'])
+            pred_class = pred.argmax()
+            print(f"Predicted Class = {pred_class}")
+            p.removeUserDebugItem(debug_text)
+            debug_text = p.addUserDebugText(f"Predicted Class = {pred_class}", (0.2,0.1,0.3), (1,0,0))
+            if pred.max() < pred_threshold:
+                print("Low confidence, please try again")
+                p.removeUserDebugItem(debug_text)
+                debug_text = p.addUserDebugText("Low confidence, please try again", (0.2,0.1,0.3), (1,0,0))
+                motion_list = []
+                print("Ready for new data")
+                continue
+            else:
+                print("High confidence, executing motion primitives")
+                return pred_class
+
 def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler):
     
     terminate = threading.Event()
@@ -288,8 +372,8 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
     y = threading.Thread(target=get_gaze_pos, args=(terminate,))
     y.start()
     adjust_camera(vr_camera_pos, vr_camera_orn_euler)
-    model_name="model/new/best_lstm_model.h5"
-    model = load_model(model_name)
+    # model_name="model/new/best_lstm_model.h5"
+    # model = load_model(model_name)
     # for i in range(3):
     #     warm_up(env)
     # current_coordinate = env.robot.get_coordinate()
@@ -304,7 +388,7 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
         # gaze_pos, pointRay = get_gaze_pos(pointRay)
         debug_text = p.addUserDebugText("Ready", (0.2,0.1,0.3), (1,0,0))
         # pred_class = get_vr_button(env)
-        pred_class = inference(model)
+        pred_class = inference_udp()
         p.removeUserDebugItem(debug_text)
         
         if pred_class == -1:
