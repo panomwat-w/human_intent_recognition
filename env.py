@@ -34,8 +34,10 @@ class ClutteredPushGrasp:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -10)
         
-        self.planeID = p.loadURDF("plane.urdf")
+        # self.planeID = p.loadURDF("plane.urdf")
 
+        # self.planeID = p.loadURDF("C:/Users/birl1/dissertation/bullet3/data/Base_1.urdf")
+        self.planeID = p.loadURDF("plane.urdf")
         self.robot.load()
         self.robot.step_simulation = self.step_simulation
 
@@ -164,6 +166,8 @@ class ClutteredPushGraspVR:
 
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 1)
         kitchenObj = p.loadSDF("kitchens/1.sdf")
+        # self.planeID = p.loadURDF("plane.urdf")
+        
 
         # self.physicsClient = p.connect(p.GUI if self.vis else p.DIRECT)
         p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0.4, cameraPitch=-32, cameraTargetPosition=[0, 0, 0])

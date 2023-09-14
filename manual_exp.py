@@ -81,7 +81,8 @@ def initialise():
 
     env = init_env()
     env.reset()
-    env.SIMULATION_STEP_DELAY = 1e-20
+    # env.SIMULATION_STEP_DELAY = 1e-20
+    env.SIMULATION_STEP_DELAY = 0
 
     return env
 
@@ -130,12 +131,12 @@ def user_control_demo(env):
         slave_pos[1] = slave_pos[1] - y
         slave_pos[2] = z
         # slave_pos[4] = np.pi/2 + pos_orient[3]*0.4
-        # slave_pos[3] = pos_orient[5]
-        # slave_pos[4] = np.pi/2 + pos_orient[3]
-        # slave_pos[5] = pos_orient[4]
+        slave_pos[3] = np.pi/2 - pos_orient[3]
+        slave_pos[4] = np.pi/2 - pos_orient[5]
+        slave_pos[5] = pos_orient[4]
         # slave_pos[3] = pos_orient[3]
         # slave_pos[4] = np.pi/2 + pos_orient[4]
-        slave_pos[5] = - pos_orient[5] * 0.8
+        # slave_pos[5] = - pos_orient[5] * 0.8
         print(round(z, 3))
 
         # print(np.array(pos_orient).round(2))

@@ -2,7 +2,7 @@
     <!-- control -->
     <link name="box1">
         <inertial>
-            <mass value="0.2"/>
+            <mass value="0.5"/>
             <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
         </inertial>
         <visual>
@@ -11,7 +11,7 @@
                 <box size="0.04 0.08 0.04"/>
             </geometry>
             <material name="Red">
-                <color rgba="1.0 0 0 1.0"/>
+                <color rgba="0.7568 0.5 0.1 1.0"/>
             </material>
         </visual>
         <collision>
@@ -20,5 +20,18 @@
                 <box size="0.04 0.08 0.04"/>
             </geometry>
         </collision> 
+        <surface>
+        <friction>
+          <ode>
+            <mu>100000.0</mu>
+            <mu2>100000.0</mu2>
+          </ode>
+        </friction>
+        <contact>
+          <ode>
+            <min_depth>0.003</min_depth>
+          </ode>
+        </contact>
+      </surface>
     </link>
 </robot>

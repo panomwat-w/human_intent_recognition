@@ -10,20 +10,6 @@ import socket
 from task_environment import *
 import time
 
-# # tf.config.set_visible_devices([], 'GPU')
-# gpus = tf.config.list_physical_devices('GPU')
-# if gpus:
-#     # Restrict TensorFlow to only allocate 2GB of memory on the first GPU
-#     try:
-#         tf.config.set_logical_device_configuration(
-#             gpus[0],
-#             [tf.config.LogicalDeviceConfiguration(memory_limit=8192)])
-#         logical_gpus = tf.config.list_logical_devices('GPU')
-#         print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-#     except RuntimeError as e:
-#         # Virtual devices must be set before GPUs have been initialized
-#         print(e)
-
 localIP = "127.0.0.1"
 localPort = 12312
 msgFromServer = ["Hello UDP Client"]
@@ -93,13 +79,13 @@ def initialise():
     p.setVRCameraState(vr_camera_pos, vr_camera_orn)
     for i in range(3):
         warm_up(env)
-    brick_id, remove_brick_origin = initialize_brick(env)
+    
 
-    return env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler
+    return env, vr_camera_pos, vr_camera_orn_euler
 
 def initialize_brick(env):
     
-    fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (0.0, -0.1), (0.04, 0.08), 0.015, 0.02)
+    fix_brick_origin, remove_brick_origin = calc_brick_origin(5, (0.1, -0.1), (0.04, 0.08), 0.015, 0.02)
     fix_brick_id_list = []
     for i in range(len(fix_brick_origin)):
         brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", fix_brick_origin[i], useFixedBase=True) 
@@ -107,11 +93,10 @@ def initialize_brick(env):
         fix_brick_id_list.append(brick_id)
     brick_origin = (-0.18, -0.1, 0.02) 
     brick_orn = p.getQuaternionFromEuler([0, 0, np.pi/2])
-    # brick_orn = p.getQuaternionFromEuler([0, 0, 0])
     brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, brick_orn, useFixedBase=False) 
     p.changeDynamics(brick_id, -1, restitution=0.2, frictionAnchor=1, lateralFriction=2)
     env.object_ids.append(brick_id)
-    wall_origin = (-0.05, -0.05, 0.1) 
+    wall_origin = (0.0, -0.05, 0.1) 
     wall_id = p.loadURDF("meshes/brick/wall.urdf", wall_origin, useFixedBase=True) 
     env.object_ids.append(wall_id)
     
@@ -165,7 +150,6 @@ def get_vr_button(env):
                 elif (e[BUTTONS][1] & p.VR_BUTTON_WAS_TRIGGERED):
                     warm_up(env)
 
-
 def inference_udp(pred_threshold=0.6):
     global msgFromServer
     
@@ -176,12 +160,12 @@ def inference_udp(pred_threshold=0.6):
     # debug_text = -1
     debug_text = p.addUserDebugText("Ready", (0.2,0.1,0.3), (1,0,0))
     while True:
-        # print(pos_orient)
         events = p.getVREvents()
         for e in events:
             if (e[BUTTONS][7] & p.VR_BUTTON_WAS_TRIGGERED):
                 return -1
-
+            if (e[BUTTONS][33] & p.VR_BUTTON_WAS_TRIGGERED):
+                return -2
         if state == 0 and pos_orient[6] == 1:
             state = 1
             print("Button pressed, start recording ...")
@@ -227,19 +211,43 @@ def inference_udp(pred_threshold=0.6):
                 print("High confidence, executing motion primitives")
                 return pred_class
 
-def get_pos_orient():
-    return pos_orient            
 
-def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler):
-    fname = input("Enter log file name <name>_<date>: ")
-    fname += "_mp_2"
+def check_goal(mp_mode, cubePos, cubeOrn, remove_brick_origin, init_cubeOrn=None):
+    if mp_mode == 0:
+        if cubePos[2] > 0.3 :
+            return True
+        else :
+            return False
+    elif mp_mode == 1:
+        d = calculate_distance(np.array(cubePos[:2]), np.array(remove_brick_origin[:2]))
+        if d < 0.03:
+            return True
+        else:
+            return False
+    elif mp_mode == 2:
+        d = calculate_distance(np.array(cubePos[:2]), np.array(remove_brick_origin[:2]))
+        if d < 0.03 and cubePos[2] < 0.025:
+            return True
+        else:
+            return False
+    elif mp_mode == 3:
+        if np.abs(cubeOrn[2] - init_cubeOrn[2]) >= np.pi/2:
+            return True
+        else:
+            return False
+        
+def get_pos_orient():
+    return pos_orient   
+
+def user_control_demo(env, vr_camera_pos, vr_camera_orn_euler, participant_name, mp_mode):
+    brick_id, remove_brick_origin = initialize_brick(env)
+    fname = participant_name + f"_mp_1_{mp_mode}"
     terminate = threading.Event()
     x = threading.Thread(target=getting_phantom_pos, args=(UDPServerSocket, msgFromServer,terminate,))
     x.start()
     y = threading.Thread(target=get_gaze_pos, args=(terminate,))
     y.start()
     adjust_camera(vr_camera_pos, vr_camera_orn_euler)
-    # check_connection(env, pos_orient)
     break_loop = False
     for i in range(1000):
         print(pos_orient)
@@ -248,36 +256,43 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
             if (e[BUTTONS][7] & p.VR_BUTTON_WAS_TRIGGERED):
                 break_loop = True
         if break_loop:
-            break                
-    # model_name="model/new/best_lstm_model.h5"
-    # model = load_model(model_name)
-    # for i in range(3):
-    #     warm_up(env)
-    # current_coordinate = env.robot.get_coordinate()
-    # current_pos = np.array(current_coordinate[0])
-    # current_orn = np.array(p.getEulerFromQuaternion(current_coordinate[1]))
-    # print(current_pos, current_orn)
-    
-    # pointRay = -1
+            break  
     state = 0
     count = 0
+    # start = time.time()
+    # z = threading.Thread(target=log_robot_object, args=(env, fname, brick_id, start, terminate,))
+    # z.start()
     grip_attempt = 0
-    start = time.time()
-    z = threading.Thread(target=log_robot_object, args=(env, fname, brick_id, start, terminate, get_pos_orient, remove_brick_origin,))
-    z.start()
+    init_cubeOrn = -1
+    timing_start = False
     cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
+    duration_text = -1
+    debug_text = -1
     while True:
-        # remove_all_objects(env)
-        # gaze_pos, pointRay = get_gaze_pos(pointRay)
-        
+        if timing_start:
+            time_current = time.time()
+            # p.removeUserDebugItem(duration_text)
+            duration = str(round(time_current - start, 2)) + ' s'
+            duration_text = p.addUserDebugText("Start", (0.2,0,0.3), (0,1,0))
+
+
         # pred_class = get_vr_button(env)
         pred_class = inference_udp()
         if pred_class == 0:
             grip_attempt += 1
-        # p.removeUserDebugItem(debug_text)
-        
         if pred_class == -1:
+            p.removeUserDebugItem(duration_text)
+            print(grip_attempt)
             break
+        if pred_class == -2:
+            start = time.time()
+            z = threading.Thread(target=log_robot_object, args=(env, fname, brick_id, start, terminate, get_pos_orient, remove_brick_origin,))
+            z.start()
+            timing_start = True
+            if mp_mode == 3:
+                init_cubePos, init_cubeOrn = p.getBasePositionAndOrientation(brick_id)
+                init_cubeOrn = p.getEulerFromQuaternion(init_cubeOrn)
+            continue
         # pred_class = count % 3
         # count += 1
         obj_pos = [gaze_pos[0], gaze_pos[1], gaze_pos[2]+0.21]
@@ -292,20 +307,50 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
         obs, _, _, _ = apply_motion_primitives(env, pred_class, obj_pos=obj_pos, des_pos=target_pos)
         cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
 
-        d = calculate_distance(np.array(cubePos[:2]), np.array(remove_brick_origin[:2]))
-        if d < 0.05 and cubePos[2] < 0.05:
-            # debug_text = p.addUserDebugText("Successful", (0.2,0.1,0.3), (0,1,0))
-            # time.sleep(0.5)
-            # p.removeUserDebugItem(debug_text)
-            print(f'Grasping Attempts: {grip_attempt}')
-            break
+        if timing_start:
+
+            cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
+            cubeOrn = p.getEulerFromQuaternion(cubeOrn)
+            if mp_mode == 3:
+                print(cubeOrn[2], init_cubeOrn[2], cubeOrn[2]-init_cubeOrn[2])
+
+            if check_goal(mp_mode, cubePos, cubeOrn, remove_brick_origin, init_cubeOrn):
+                completion_time = time.time() - start
+                p.removeUserDebugItem(debug_text)
+                debug_text = p.addUserDebugText(f"Successful in {round(completion_time, 2)} sec", (0.2,0.1,0.3), (0,1,0))
+                grasping_text = -1
+                if mp_mode == 0:
+                    grasping_text = p.addUserDebugText(f"Grasping attempts : {grip_attempt} times", (0.2,0,0.3), (0,1,0))
+                print(f'Grasping Attempts: {grip_attempt}')
+                terminate.set()
+                time.sleep(2)
+                p.removeUserDebugItem(duration_text)
+                p.removeUserDebugItem(debug_text)
+                p.removeUserDebugItem(grasping_text)
+                break
+    # completion_time = time.time() - start
+    # print(completion_time)
     terminate.set()
     # y.join()
     # x.join()
           
 
 if __name__ == '__main__':
-    env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler = initialise()
-    user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler)
-    # burn_samples()
+    env, vr_camera_pos, vr_camera_orn_euler = initialise()
+    participant_name = input("Enter participant name : ")
+    while True:
+        while True:
+            try:
+                mp_mode = input("Enter manual sub 1 mode : ")
+                mp_mode = int(mp_mode)
+                if input(f"Confirm manual sub 1 mode {mp_mode} (y/n) : ") == 'y':
+                    break
+                
+            except:
+                print('Input incorrect')
+        user_control_demo(env, vr_camera_pos, vr_camera_orn_euler, participant_name, mp_mode)
+        time.sleep(2)
+        remove_all_objects(env)
+        if input(f"Exit? (y/n) : ") == 'y':
+            break
     env.close()

@@ -87,7 +87,10 @@ def initialise():
     env.reset()
     env.SIMULATION_STEP_DELAY = 1e-4
     vr_camera_pos = [0,-1.9,0.09]
-    vr_camera_orn_euler = [-np.pi/2 + np.pi/15,0,0]
+    # vr_camera_pos = [1.5,0.5,0.09]
+    # vr_camera_pos = [1.46, -0.12000000000000012, 0.09] 
+    vr_camera_orn_euler = [-0.7853981633974483, -0.08168140899333459, 1.4011503235010618]
+    # vr_camera_orn_euler = [-np.pi/2 + np.pi/15,0,0]
     vr_camera_orn_euler = [-np.pi/4,0,0]
     vr_camera_orn = p.getQuaternionFromEuler(vr_camera_orn_euler)
     p.setVRCameraState(vr_camera_pos, vr_camera_orn)
@@ -98,7 +101,7 @@ def initialise():
     return env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler
 
 def initialize_brick(env):
-    brick_origin = (-0.38, -0.05, 0.02) 
+    brick_origin = (-0.3, -0.05, 0.02) 
     fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (-0.1, -0.1), (0.04, 0.08), 0.015, 0.02)
     fix_brick_id_list = []
     for i in range(len(fix_brick_origin)):
@@ -109,51 +112,11 @@ def initialize_brick(env):
     brick_orn = p.getQuaternionFromEuler([0, 0, np.pi/2])
     brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, brick_orn, useFixedBase=False) 
     env.object_ids.append(brick_id)
-    wall_origin = (-0.2, -0.05, 0.15) 
+    wall_origin = (-0.15, -0.05, 0.1) 
     wall_id = p.loadURDF("meshes/brick/wall.urdf", wall_origin, useFixedBase=True) 
+    env.object_ids.append(wall_id)
     
     return brick_id, remove_brick_origin
-
-def adjust_camera(vr_camera_pos, vr_camera_orn_euler):
-
-    debug_text = p.addUserDebugText("Adjust Camera", (0.2, 0.1, 0.1), (0,1,0))
-    analog_threshold = 0.2
-    while True:
-        
-        events = p.getVREvents(allAnalogAxes=1)
-        for e in (events):
-            if (e[BUTTONS][7] & p.VR_BUTTON_WAS_TRIGGERED): 
-                p.removeUserDebugItem(debug_text)
-                return -1
-            if e[CONTROLLER_ID] == 1:
-                if e[8][0] > analog_threshold:
-                    vr_camera_pos[0] += 0.01
-                elif e[8][0] < -analog_threshold:
-                    vr_camera_pos[0] -= 0.01
-                if e[8][1] > analog_threshold:
-                    vr_camera_pos[1] += 0.01
-                elif e[8][1] < -analog_threshold:
-                    vr_camera_pos[1] -= 0.01
-            if e[CONTROLLER_ID] == 2:
-                if e[8][1] > analog_threshold:
-                    vr_camera_pos[2] += 0.001
-                elif e[8][1] < -analog_threshold:
-                    vr_camera_pos[2] -= 0.001
-                if e[8][0] > analog_threshold:
-                    vr_camera_orn_euler[0] += np.pi/1000
-                elif e[8][0] < -analog_threshold:
-                    vr_camera_orn_euler[0] -= np.pi/1000
-        
-        vr_camera_orn = p.getQuaternionFromEuler(vr_camera_orn_euler)
-        p.setVRCameraState(vr_camera_pos, vr_camera_orn)
-        time.sleep(0.01)
-                
-
-def remove_all_objects(env):
-    for i in range(len(env.object_ids)):
-        p.removeBody(env.object_ids[i])
-    env.object_ids = []
-    env.reset()
 
 def get_vr_button(env):
     while True:
@@ -176,6 +139,9 @@ def get_vr_button(env):
                 elif (e[BUTTONS][1] & p.VR_BUTTON_WAS_TRIGGERED):
                     warm_up(env)
 
+def get_pos_orient():
+    return pos_orient   
+
 def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_camera_orn_euler):
     # Touch X Communication
     global msgFromServer
@@ -185,26 +151,29 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
     x = threading.Thread(target=getting_phantom_pos, args=(UDPServerSocket, msgFromServer,terminate,))
     x.start()
     adjust_camera(vr_camera_pos, vr_camera_orn_euler)
-    # for i in range(3):
-    #     warm_up(env)
-    # current_coordinate = env.robot.get_coordinate()
-    # current_pos = np.array(current_coordinate[0])
-    # current_orn = np.array(p.getEulerFromQuaternion(current_coordinate[1]))
-    # print(current_pos, current_orn)
-    
-    # pointRay = -1
+
     state = 0
     count = 0
+    grip_attempt = 0
     debug_text = p.addUserDebugText("Ready", (0.2,0.1,0.3), (1,0,0))
     start = time.time()
-    z = threading.Thread(target=log_robot_object, args=(env, fname, brick_id, start, terminate,))
+    z = threading.Thread(target=log_robot_object, args=(env, fname, brick_id, start, terminate, get_pos_orient, remove_brick_origin,))
     z.start()
     duration_text = -1
+    break_loop = False
     while True:
         # gaze_pos, pointRay = get_gaze_pos(pointRay)
         
         # pred_class = get_vr_button(env)
         # p.removeUserDebugItem(debug_text)
+        events = p.getVREvents()
+        for e in events:
+            if (e[BUTTONS][7] & p.VR_BUTTON_WAS_TRIGGERED):
+                break_loop = True
+            if (e[BUTTONS][1] & p.VR_BUTTON_WAS_TRIGGERED):
+                warm_up(env)
+        if break_loop:
+            break
         time_current = time.time()
         p.removeUserDebugItem(duration_text)
         duration = str(round(time_current - start, 2)) + ' s'
@@ -216,15 +185,22 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
         slave_pos[0] = slave_pos[0] + x
         slave_pos[1] = slave_pos[1] - y
         slave_pos[2] = z
-        slave_pos[5] = - pos_orient[5] * 0.8
+        # slave_pos[5] = - pos_orient[5] * 0.8
+        slave_pos[3] = np.pi/2 - pos_orient[3]
+        slave_pos[4] = np.pi/2 + pos_orient[5]
+        slave_pos[5] = pos_orient[4]
         if pos_orient[6] == 0:
             slave_pos[6] = 0.085
             with lock:
                 msgFromServer[0] = "Push"
+            prev_grip = 0
         else:
             slave_pos[6] = 0.0
             with lock:
                 msgFromServer[0] = "Push"
+            if prev_grip == 0:
+                grip_attempt += 1
+            prev_grip = 1
         
         slave_pos = tuple(slave_pos)
         obs, reward, done, info = env.step(slave_pos, 'end')
@@ -232,9 +208,10 @@ def user_control_demo(env, brick_id, remove_brick_origin, vr_camera_pos, vr_came
         cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
 
         d = calculate_distance(np.array(cubePos[:2]), np.array(remove_brick_origin[:2]))
-        if d < 0.05 and cubePos[2] < 0.035:
+        if d < 0.03 and cubePos[2] < 0.035:
             p.removeUserDebugItem(debug_text)
             debug_text = p.addUserDebugText("Successful", (0.2,0.1,0.3), (0,1,0))
+            print(f'Grasping Attempts : {grip_attempt}')
             break
     terminate.set()
     # x.join()

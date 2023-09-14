@@ -17,6 +17,11 @@ import socket
 # from pybullet_ur5_robotiq.envs.robot import UR5Robotiq140
 # from pybullet_ur5_robotiq.envs.ycb import YCBModels
 
+CONTROLLER_ID = 0
+POSITION = 1
+ORIENTATION = 2
+ANALOG = 3
+BUTTONS = 6
 
 def init_env(VR=False):
     ycb_models = YCBModels(os.path.join('./data/ycb', '**', 'textured-decmp.obj'),)
@@ -43,10 +48,10 @@ def calc_brick_origin(max_num_bricks=5, brick_origin=(0.0,0.0), brick_dim=(0.06,
                 removable_idx.append(len(fix_brick_origin_list)-1)
             for j in range(1, int((i-1)/2) + 1):
                 fix_brick_origin_list.append((brick_origin[0]+(brick_dim[0]+margin)*(i-1), brick_origin[1]+(brick_dim[1]+margin)*j, z))
-                if j < int((i-1)/2):
+                if j < int((i-1)/2) and i < max_num_bricks:
                     removable_idx.append(len(fix_brick_origin_list)-1)
                 fix_brick_origin_list.append((brick_origin[0]+(brick_dim[0]+margin)*(i-1), brick_origin[1]-(brick_dim[1]+margin)*j, z))
-                if j < int((i-1)/2):
+                if j < int((i-1)/2) and i < max_num_bricks:
                     removable_idx.append(len(fix_brick_origin_list)-1)
             if i < max_num_bricks:
                 fix_brick_origin_list.append((brick_origin[0]+(brick_dim[0]+margin)*(2 * max_num_bricks - i - 1), brick_origin[1], z))
@@ -71,7 +76,7 @@ def calc_brick_origin(max_num_bricks=5, brick_origin=(0.0,0.0), brick_dim=(0.06,
 
         
 def move_position(env, target_pos, gripper_length, config_pos=True, config_yaw=False, config_pitch=False, config_gripper=True, target_yaw=0.0, target_pitch=np.pi/2, distance=[0.01, 0.01, 0.1], patience=50):
-    debug_text = p.addUserDebugText("Please Wait", (0.2,0.1,0.3), (1,0,0))
+    debug_text = p.addUserDebugText("Please Wait", (0.2,-0.1,0.3), (1,0,0))
     current_coordinate = env.robot.get_coordinate()
     current_pos = list(current_coordinate[0])
     current_orn = list(p.getEulerFromQuaternion(current_coordinate[1]))
@@ -127,7 +132,7 @@ def reset_orn(env, d=[0.01, 0.01]):
     current_orn = list(p.getEulerFromQuaternion(current_coordinate[1]))
 
     target_pitch = np.pi/2
-    target_yaw = np.pi/2
+    target_yaw = 0
 
     gripper_length = 0.085
     slave_pos = current_pos + current_orn + [gripper_length]
@@ -174,6 +179,7 @@ def move_joint(env, target_joint, gripper_length, distance=0.01, patience=150):
         if i > patience:
             break
         env.step_simulation()
+        time.sleep(0.005)
         # d = calculate_distance(current_joint, target_joint)
         current_joint = env.robot.get_joint_pose()
         d = abs(target_joint[5] - current_joint[5])
@@ -209,11 +215,39 @@ def warm_up(env):
     #     target_pos = (x[i], 0, 0.5)
     #     obs, reward, done, info = move_position(env, target_pos, 0.085)
     target_pos = np.array(env.read_debug_parameter())
+    move_height = 0.6
+    target_pos[2] = move_height
     target_pos[6] = 0.085
+    
     obs, reward, done, info = move_position(env, target_pos[:3], target_pos[6], config_pitch=True, target_pitch=np.pi/2, config_yaw=True, target_yaw=np.pi/2, distance=[0.02, 0.02, 0.03])
     reset_orn(env, d=[0.01, 0.01])
     return obs, reward, done, info
 
+def check_connection(env, pos_orient):
+    while True:
+        slave_pos = list(env.read_debug_parameter()) # get initial position
+        x, y, z = rescale_pos_orient(pos_orient)
+        joint_pose = env.robot.get_joint_pose()
+
+        slave_pos[0] = slave_pos[0] + x
+        slave_pos[1] = slave_pos[1] - y
+        slave_pos[2] = z
+        # slave_pos[5] = - pos_orient[5] * 0.8
+        slave_pos[3] = pos_orient[5]
+        slave_pos[4] = np.pi/2 + pos_orient[3]
+        slave_pos[5] = pos_orient[4]
+        if pos_orient[6] == 0:
+            slave_pos[6] = 0.085
+        else:
+            slave_pos[6] = 0.0
+        
+        slave_pos = tuple(slave_pos)
+        obs, reward, done, info = env.step(slave_pos, 'end')
+
+        events = p.getVREvents()
+        for e in events:
+            if (e[BUTTONS][1] & p.VR_BUTTON_WAS_TRIGGERED):
+                break
 
 def apply_motion_primitives(env, pred_class, obj_pos=[-0.2, -0.2, 0.1], obj_orn=[0.0, 0.0, 0.0], des_pos=[0.2, 0.2, 0.1]):
     print("pred_class: ", pred_class)
@@ -224,9 +258,11 @@ def apply_motion_primitives(env, pred_class, obj_pos=[-0.2, -0.2, 0.1], obj_orn=
     current_length = env.robot.get_gripper_length()
     current_joint_pose = env.robot.get_joint_pose()
     close_length = 0.03
+    move_height = 0.6
+    place_height = 0.3
     if pred_class == 0:
         target_pos = np.array(obj_pos)
-        target_pos[2] = 0.5
+        target_pos[2] = move_height
         gripper_length = 0.08
         move_gripper(env, gripper_length)
         obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=True, target_pitch=np.pi/2, config_yaw=False, target_yaw=None, distance=[0.02, 0.02, 0.1])
@@ -240,37 +276,37 @@ def apply_motion_primitives(env, pred_class, obj_pos=[-0.2, -0.2, 0.1], obj_orn=
         move_gripper(env, gripper_length)
 
         target_pos = current_pos
-        target_pos[2] = 0.5
+        target_pos[2] = move_height
         gripper_length = close_length
         obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=False, target_pitch=np.pi/2, config_yaw=False, target_yaw=None, distance=[0.05, 0.05, 0.1])
 
     elif pred_class == 1:
         target_pos = np.array(des_pos)
-        target_pos[2] = 0.5
+        target_pos[2] = move_height
         gripper_length = close_length
         obs, reward, done, info = move_position(env, target_pos, gripper_length, config_yaw=False, target_yaw=None, distance=[0.03, 0.03, 0.1])
     
     elif pred_class == 2:
         target_pos = current_pos
-        target_pos[2] = 0.3
+        target_pos[2] = place_height
         gripper_length = close_length
-        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=True, target_pitch=np.pi/2, config_yaw=False, distance=[0.03, 0.03, 0.03])
+        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=True, target_pitch=np.pi/2, config_yaw=False, distance=[0.01, 0.01, 0.03])
         current_pos = np.array(obs['ee_pos'])
 
         gripper_length = 0.05
         move_gripper(env, gripper_length)
 
         target_pos = current_pos
-        target_pos[2] = 0.5
+        target_pos[2] = move_height
         gripper_length = 0.08
-        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_yaw=True, distance=[0.1, 0.1, 0.1])
+        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_yaw=True, distance=[0.01, 0.01, 0.03])
 
         target_pos = np.array(env.read_debug_parameter())[:3]
-        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=True, target_pitch=np.pi/2, config_yaw=True, target_yaw=None, distance=[0.1, 0.1, 0.1])
+        obs, reward, done, info = move_position(env, target_pos, gripper_length, config_pitch=True, target_pitch=np.pi/2, config_yaw=True, target_yaw=0, distance=[0.1, 0.1, 0.1])
 
-    elif pred_class == 3:
+    elif pred_class == 3 or pred_class == 4:
         target_pos = current_pos
-        gripper_length = current_length
+        gripper_length = close_length
         target_joint = list(current_joint_pose.copy())
         increment = np.pi/2
         target_joint[5] = (target_joint[5] + np.pi/2 + increment) % np.pi - np.pi/2
@@ -319,22 +355,30 @@ def stream_joint_pose(env, brick_id):
         return_data = send_message(s, msg)
     # return return_data, msg
 
-def log_robot_object(env, fname, brick_id, start, terminate):
+def log_robot_object(env, fname, brick_id, start, terminate, get_pos_orient, remove_brick_origin):
     with open(f'logs/{fname}_robot_object.csv', 'w') as f:
+        column = 'time,joint1,joint2,joint3,joint4,joint5,joint6,gripper'
+        column += ',cube_pos_x,cube_pos_y,cube_pos_z,cube_orn_roll,cube_orn_pitch,cube_orn_yaw'
+        column += ',haptic_x,haptic_y,haptic_z,haptic_roll,haptic_pitch,haptic_yaw,button'
+        column += ',target_x,target_y,target_z\n'
+        f.write(column)
         while True:
             joint_pose = np.array(env.robot.get_joint_pose())
             gripper_length = env.robot.get_gripper_length()
-            joint_pose = np.array(joint_pose)/np.pi*180
-            gripper_length = 1 - gripper_length/0.085
+            joint_pose = np.array(joint_pose)
+            gripper_length = 1 - gripper_length/0.085 
             cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
             cubePos = np.array(cubePos)
-            cubeOrn = np.array(cubeOrn)
+            cubeOrn = np.array(p.getEulerFromQuaternion(cubeOrn))
+            position_haptic = list(np.array(get_pos_orient()).astype('str'))
+            position_target = list(np.array(remove_brick_origin).astype('str'))
             current_time = time.time()
             duration = current_time - start
             joint_pose_msg = ','.join([str(duration)]+list(joint_pose.astype('str'))+
                                     [str(gripper_length)]+
                                     list(cubePos.astype('str'))+
-                                    list(cubeOrn.astype('str')))
+                                    list(cubeOrn.astype('str'))+
+                                    position_haptic+position_target)
             f.write(joint_pose_msg+'\n')
             time.sleep(0.01)
             if terminate.is_set():
@@ -498,9 +542,71 @@ def rescale_pos_orient(pos_orient):
     y_range = [-0.224, 0.224]
     z_range = [0.0, 1.0]
 
-    x = ((pos_orient[1] - x_range_device[0])/(x_range_device[1] - x_range_device[0]) - 0.5)*0.95
+    x = ((pos_orient[1] - x_range_device[0])/(x_range_device[1] - x_range_device[0]) - 0.5)*1.1
     y = ((pos_orient[0] - y_range_device[0])/(y_range_device[1] - y_range_device[0]) - 0.5)*1.1
     z = ((pos_orient[2] - z_range_device[0])/(z_range_device[1] - z_range_device[0]))*0.7
     # z = pos_orient[2] - 0.2
 
     return x, y, z
+
+def receive_message(motion_list, vis=False):
+    data_dict =  {'motion': motion_list, 'vis':vis}
+    msgFromClient = json.dumps(data_dict)
+    bytesToSend = str.encode(msgFromClient)
+    serverAddressPort   = ("10.248.155.174", 20001)
+
+    bufferSize          = 10000
+
+    # Create a UDP socket at client side
+
+    UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+    # Send to server using created UDP socket
+
+    UDPClientSocket.sendto(bytesToSend, serverAddressPort)
+
+    msgFromServer = UDPClientSocket.recvfrom(bufferSize)
+    result = json.loads(msgFromServer[0])
+
+    return result
+
+def adjust_camera(vr_camera_pos, vr_camera_orn_euler):
+
+    debug_text = p.addUserDebugText("Adjust Camera", (0.2, 0.1, 0.1), (0,1,0))
+    analog_threshold = 0.2
+    while True:
+        
+        events = p.getVREvents(allAnalogAxes=1)
+        for e in (events):
+            if (e[BUTTONS][7] & p.VR_BUTTON_WAS_TRIGGERED): 
+                p.removeUserDebugItem(debug_text)
+                return -1
+            if e[CONTROLLER_ID] == 1:
+                if e[8][0] > analog_threshold:
+                    vr_camera_pos[0] += 0.01
+                elif e[8][0] < -analog_threshold:
+                    vr_camera_pos[0] -= 0.01
+                if e[8][1] > analog_threshold:
+                    vr_camera_pos[1] += 0.01
+                elif e[8][1] < -analog_threshold:
+                    vr_camera_pos[1] -= 0.01
+            if e[CONTROLLER_ID] == 2:
+                if e[8][1] > analog_threshold:
+                    vr_camera_pos[2] += 0.001
+                elif e[8][1] < -analog_threshold:
+                    vr_camera_pos[2] -= 0.001
+                if e[8][0] > analog_threshold:
+                    vr_camera_orn_euler[0] += np.pi/1000
+                elif e[8][0] < -analog_threshold:
+                    vr_camera_orn_euler[0] -= np.pi/1000
+        
+        vr_camera_orn = p.getQuaternionFromEuler(vr_camera_orn_euler)
+        p.setVRCameraState(vr_camera_pos, vr_camera_orn)
+        time.sleep(0.01)
+
+
+def remove_all_objects(env):
+    for i in range(len(env.object_ids)):
+        p.removeBody(env.object_ids[i])
+    env.object_ids = []
+    env.reset()
