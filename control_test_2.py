@@ -115,7 +115,7 @@ def move_position(env, target_pos, gripper_length, distance=0.005, patience=100)
     while d > distance:
         if i > patience:
             break
-        env.step_simulation()
+        # env.step_simulation()
         d = calculate_distance(obs['ee_pos'], slave_pos[:3])
         i += 1
     obs, reward, done, info = env.step(slave_pos, 'end')
@@ -127,7 +127,7 @@ def move_gripper(env, gripper_length, distance=0.01, patience=150):
     d = abs(current_length - gripper_length)
     i = 0
     while d > distance and i < patience:
-        env.step_simulation()
+        # env.step_simulation()
         i += 1
 
 def calculate_distance(target, current):
@@ -200,10 +200,10 @@ def user_control_demo():
     # x.start()
     env = init_env()
     env.reset()
-    
+    p.setRealTimeSimulation(1)
     brick_origin = (-0.2, -0.2, 0.0) 
     
-    fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (0.06, 0.0), (0.06, 0.12, 0.06), 0.01, 0.03)
+    fix_brick_origin, remove_brick_origin = calc_brick_origin(7, (0.00, 0.0), (0.04, 0.08, 0.04), 0.01, 0.02)
     fix_brick_id_list = []
     for i in range(len(fix_brick_origin)):
         brick_id = p.loadURDF("meshes/brick/brick_clone.urdf", fix_brick_origin[i], useFixedBase=True) 
@@ -212,9 +212,9 @@ def user_control_demo():
     
     brick_id = p.loadURDF("meshes/brick/brick.urdf", brick_origin, useFixedBase=False) 
 
-    env.SIMULATION_STEP_DELAY = 1/100000.0
+    # env.SIMULATION_STEP_DELAY = 1/100000.0s
     obs, reward, done, info= warm_up(env)
-    env.SIMULATION_STEP_DELAY = 1/240.0
+    env.SIMULATION_STEP_DELAY = 0.3
 
     target_pos=[remove_brick_origin[0], remove_brick_origin[1], 0.28]
     count = 0
@@ -225,8 +225,8 @@ def user_control_demo():
     # y = threading.Thread(target=log_robot_object, args=(env, brick_id,))
     # y.start()
     while True:
-        # pred_class = int(input("Enter predicted class : "))
-        pred_class = count % 4
+        pred_class = int(input("Enter predicted class : "))
+        # pred_class = count % 4
         count += 1
         cubePos, cubeOrn = p.getBasePositionAndOrientation(brick_id)
         print("cubePos before: ", cubePos)
